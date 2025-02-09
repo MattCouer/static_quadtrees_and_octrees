@@ -1,0 +1,4 @@
+[submodule "redot-cpp"]
+	path = redot-cpp
+	url = https://github.com/Redot-Engine/redot-cpp
+	branch = 4.3
