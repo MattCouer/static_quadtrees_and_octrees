@@ -105,7 +105,7 @@ int64_t ZQuadTree::floating_to_integral_x(real_t x, int64_t at_depth){
     }
     real_t left = initial_quadrant_center.x - initial_quadrant_span;
     real_t right = initial_quadrant_center.x + initial_quadrant_span;
-    return float((x-left)/(right - left) * (1LL << at_depth));
+    return floor((x-left)/(right - left) * (1LL << at_depth));
 }
 int64_t ZQuadTree::floating_to_integral_y(real_t y, int64_t at_depth){
     if(at_depth > total_depth || at_depth < 0){
@@ -114,7 +114,7 @@ int64_t ZQuadTree::floating_to_integral_y(real_t y, int64_t at_depth){
     }
     real_t bottom = initial_quadrant_center.y - initial_quadrant_span;
     real_t top = initial_quadrant_center.y + initial_quadrant_span;
-    return float((y-bottom)/(top - bottom) * (1LL << at_depth));
+    return floor((y-bottom)/(top - bottom) * (1LL << at_depth));
 }
 
 int64_t ZQuadTree::find_depth(){

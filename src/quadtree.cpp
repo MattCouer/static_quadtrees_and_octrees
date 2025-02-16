@@ -212,7 +212,7 @@ int64_t QuadTree::cell_count(){
     cell_count_recursive(root, ct);
     return ct;
 }
-void QuadTree::cell_count_recursive(Ref<QuadTreeQuadrant> root, int64_t ct){
+void QuadTree::cell_count_recursive(Ref<QuadTreeQuadrant> root, int64_t &ct){
     if(root.is_null())
         return;
     ct++;

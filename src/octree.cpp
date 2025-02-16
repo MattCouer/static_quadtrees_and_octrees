@@ -224,7 +224,7 @@ int64_t OcTree::cell_count(){
     cell_count_recursive(root, ct);
     return ct;
 }
-void OcTree::cell_count_recursive(Ref<OcTreeOctant> root, int64_t ct){
+void OcTree::cell_count_recursive(Ref<OcTreeOctant> root, int64_t &ct){
     if(root.is_null())
         return;
     ct++;

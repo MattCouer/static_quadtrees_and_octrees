@@ -60,7 +60,7 @@ public:
 	int64_t get_maximum_depth();
 	void set_maximum_depth(int64_t p_maximum_depth);
     int64_t cell_count();
-	void cell_count_recursive(Ref<QuadTreeQuadrant> root, int64_t ct);
+	void cell_count_recursive(Ref<QuadTreeQuadrant> root, int64_t &ct);
 
    	void split_on_cell(Callable condition_on_cell);
 	void split_on_condition(Callable condition);
