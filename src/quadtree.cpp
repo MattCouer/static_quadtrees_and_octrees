@@ -182,7 +182,7 @@ Ref<godot::QuadTree> QuadTree::json_deserialize(TypedArray<Dictionary> data){
     Dictionary meta = data[0];
     Ref<godot::QuadTree> res;
     res.instantiate();
-    res->root = Ref<QuadTreeQuadrant>();
+    res->root = linear[0];
     res->maximum_depth = meta["maximum_depth"];
     for(int64_t i = 0; i < meta.keys().size(); i++){
         Variant key = meta.keys()[i];
