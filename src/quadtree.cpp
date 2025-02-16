@@ -16,8 +16,9 @@ void QuadTree::_bind_methods(){
 	ClassDB::bind_method(D_METHOD("split_on_condition", "condition"), &QuadTree::split_on_condition);
     ClassDB::bind_method(D_METHOD("find_depth"), &QuadTree::find_depth);
     ClassDB::bind_method(D_METHOD("layout_leaves"), &QuadTree::layout_leaves);
-	ClassDB::bind_method(D_METHOD("leaf_that_contains_point"), &QuadTree::leaf_that_contains_point);
-	ClassDB::bind_method(D_METHOD("quadrants_that_intersect_ray", "ray_origin", "ray_direction"), &QuadTree::quadrants_that_intersect_ray);
+	ClassDB::bind_method(D_METHOD("leaf_that_contains_point", "point"), &QuadTree::leaf_that_contains_point);
+	ClassDB::bind_method(D_METHOD("cell_that_contains_point", "point", "at_depth"), &QuadTree::cell_that_contains_point);
+	ClassDB::bind_method(D_METHOD("cells_that_intersect_ray", "ray_origin", "ray_direction"), &QuadTree::cells_that_intersect_ray);
     ClassDB::bind_method(D_METHOD("find_neighbor_for_traversal", "quadrant", "neighbor"), &QuadTree::find_neighbor_for_traversal);
     ClassDB::bind_method(D_METHOD("find_neighbor_of_equal_depth", "quadrant", "neighbor"), &QuadTree::find_neighbor_of_equal_depth);
 	ClassDB::bind_method(D_METHOD("find_neighbors_of_equal_depth", "quadrant", "neighbors"), &QuadTree::find_neighbors_of_equal_depth);
@@ -160,7 +161,11 @@ TypedArray<Dictionary> QuadTree::json_serialize(Ref<QuadTree> quadtree){
     return res;
 }
 Ref<godot::QuadTree> QuadTree::json_deserialize(TypedArray<Dictionary> data){
-    Ref<godot::QuadTree> res;
+    if(!data[0].has_key("maximum_depth")){
+        //print err
+        return Ref<godot::QuadTree>();
+    }
+    
     TypedArray<FlatQuadTreeQuadrant> flat_array;
     flat_array.resize(data.size()-1);
     Ref<FlatQuadTreeQuadrant> flat_quadrant;
@@ -175,8 +180,9 @@ Ref<godot::QuadTree> QuadTree::json_deserialize(TypedArray<Dictionary> data){
     TypedArray<QuadTreeQuadrant> linear = flat_to_linear(flat_array);
 
     Dictionary meta = data[0];
+    Ref<godot::QuadTree> res;
     res.instantiate();
-    res->root = linear[0];
+    res->root = Ref<QuadTreeQuadrant>();
     res->maximum_depth = meta["maximum_depth"];
     for(int64_t i = 0; i < meta.keys().size(); i++){
         Variant key = meta.keys()[i];
@@ -365,29 +371,10 @@ void QuadTree::layout_leaves_recursive(Ref<QuadTreeQuadrant> root, TypedArray<Qu
 
 
 Ref<QuadTreeQuadrant> QuadTree::leaf_that_contains_point(Vector2 point){
+    if(!get_root()->contains_point(point))
+        return Ref<QuadTreeQuadrant>();
     return leaf_that_contains_point_recursive(get_root(), point);
 }
-
-TypedArray<QuadTreeQuadrant> QuadTree::quadrants_that_intersect_ray(Vector2 ray_origin, Vector2 ray_direction){
-    TypedArray<QuadTreeQuadrant> arr;
-    quadrants_that_intersect_ray_recursive(get_root(), arr, ray_origin, ray_direction);
-    
-    return arr;
-}
-
-
-void QuadTree::quadrants_that_intersect_ray_recursive(Ref<QuadTreeQuadrant> root, TypedArray<QuadTreeQuadrant> &intersected, Vector2 ray_origin, Vector2 ray_direction){
-    if(root->slab_test(ray_origin, ray_direction)){
-        if(root->is_leaf())
-            intersected.push_back(root);
-    
-        for(int64_t i = 0; i < root->children.size(); i++)
-            quadrants_that_intersect_ray_recursive(root->children[i], intersected, ray_origin, ray_direction);
-    }
-}
-
-
-
 Ref<QuadTreeQuadrant> QuadTree::leaf_that_contains_point_recursive(Ref<QuadTreeQuadrant> root, Vector2 point){
     Ref<QuadTreeQuadrant> queried = root;
     while (!queried->is_leaf()){
@@ -401,6 +388,45 @@ Ref<QuadTreeQuadrant> QuadTree::leaf_that_contains_point_recursive(Ref<QuadTreeQ
     }
     return queried;
 }
+
+Ref<QuadTreeQuadrant> QuadTree::cell_that_contains_point(Vector2 point, int64_t at_depth){
+    if(!get_root()->contains_point(point))
+        return Ref<QuadTreeQuadrant>();
+    return cell_that_contains_point_recursive(get_root(), point, at_depth);
+}
+Ref<QuadTreeQuadrant> QuadTree::cell_that_contains_point_recursive(Ref<QuadTreeQuadrant> root, Vector2 point, int64_t at_depth){
+    Ref<QuadTreeQuadrant> queried = root;
+    int64_t depth = 0;
+    while (depth < at_depth){
+        for(int64_t i = 0; i < queried->children.size(); i++){
+            Ref<QuadTreeQuadrant> queried_child = queried->children[i];
+            if(queried_child->contains_point(point)){
+                queried = queried_child;
+                depth++;
+                break;
+            }
+        }
+    }
+    return queried;
+}
+
+TypedArray<QuadTreeQuadrant> QuadTree::cells_that_intersect_ray(Vector2 ray_origin, Vector2 ray_direction){
+    TypedArray<QuadTreeQuadrant> arr;
+    cells_that_intersect_ray_recursive(get_root(), arr, ray_origin, ray_direction);
+    return arr;
+}
+
+
+void QuadTree::cells_that_intersect_ray_recursive(Ref<QuadTreeQuadrant> root, TypedArray<QuadTreeQuadrant> &intersected, Vector2 ray_origin, Vector2 ray_direction){
+    if(root->slab_test(ray_origin, ray_direction)){
+        if(root->is_leaf())
+            intersected.push_back(root);
+    
+        for(int64_t i = 0; i < root->children.size(); i++)
+            cells_that_intersect_ray_recursive(root->children[i], intersected, ray_origin, ray_direction);
+    }
+}
+
 
 Ref<QuadTreeQuadrant> QuadTree::find_neighbor_for_traversal(Ref<QuadTreeQuadrant> quadrant, int64_t neighbor){
     Ref<QuadTreeQuadrant> query = quadrant;
@@ -426,12 +452,12 @@ Ref<QuadTreeQuadrant> QuadTree::find_neighbor_of_equal_depth(Ref<QuadTreeQuadran
     int64_t n_query = quadtree_eqd_neighbor_table[selected_quadrant_position][neighbor][0];
 
     if(n_query == -1){
-        Ref<QuadTreeQuadrant> parent_neighbor = find_neighbor_of_equal_depth(quadrant->parent, neighbor);
+        Ref<QuadTreeQuadrant> parent_neighbor = find_neighbor_of_equal_depth(Ref<QuadTreeQuadrant>(quadrant->parent), neighbor);
         if(parent_neighbor.is_null())
             return Ref<QuadTreeQuadrant>();
         return parent_neighbor->children[quadtree_eqd_neighbor_table[selected_quadrant_position][neighbor][1]];
     }else{
-        return parent_ref->children[quadtree_eqd_neighbor_table[selected_quadrant_position][neighbor][1]];
+        return parent_ref->children[quadtree_eqd_neighbor_table[selected_quadrant_position][neighbor][0]];
     }
 }
 

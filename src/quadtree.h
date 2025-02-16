@@ -72,8 +72,11 @@ public:
 	void layout_leaves_recursive(Ref<QuadTreeQuadrant> root, TypedArray<QuadTreeQuadrant>& leaves);
 	Ref<QuadTreeQuadrant> leaf_that_contains_point(Vector2 point);
 	Ref<QuadTreeQuadrant> leaf_that_contains_point_recursive(Ref<QuadTreeQuadrant> root, Vector2 point);
-	TypedArray<QuadTreeQuadrant> quadrants_that_intersect_ray(Vector2 ray_origin, Vector2 ray_direction);
-    void quadrants_that_intersect_ray_recursive(Ref<QuadTreeQuadrant> root, TypedArray<QuadTreeQuadrant> &intersected, Vector2 ray_origin, Vector2 ray_direction);	
+    Ref<QuadTreeQuadrant> cell_that_contains_point(Vector2 point, int64_t at_depth);
+    Ref<QuadTreeQuadrant> cell_that_contains_point_recursive(Ref<QuadTreeQuadrant> root, Vector2 point, int64_t at_depth);
+        
+	TypedArray<QuadTreeQuadrant> cells_that_intersect_ray(Vector2 ray_origin, Vector2 ray_direction);
+    void cells_that_intersect_ray_recursive(Ref<QuadTreeQuadrant> root, TypedArray<QuadTreeQuadrant> &intersected, Vector2 ray_origin, Vector2 ray_direction);	
 
 	Ref<QuadTreeQuadrant> find_neighbor_for_traversal(Ref<QuadTreeQuadrant> quadrant, int64_t neighbor);
 	Ref<QuadTreeQuadrant> find_neighbor_of_equal_depth(Ref<QuadTreeQuadrant> quadrant, int64_t neighbor);

@@ -67,8 +67,11 @@ public:
 	void layout_leaves_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOctant> leaves);
 	Ref<OcTreeOctant>  leaf_that_contains_point(Vector3 point);
 	Ref<OcTreeOctant> leaf_that_contains_point_recursive(Ref<OcTreeOctant> root, Vector3 point);
-	TypedArray<OcTreeOctant> octants_that_intersect_ray(Vector3 ray_origin, Vector3 ray_direction);
-    void octants_that_intersect_ray_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOctant> &intersected, Vector3 ray_origin, Vector3 ray_direction);
+	Ref<OcTreeOctant> cell_that_contains_point(Vector3 point, int64_t at_depth);
+	Ref<OcTreeOctant> cell_that_contains_point_recursive(Ref<OcTreeOctant> root, Vector3 point, int64_t at_depth);
+		
+	TypedArray<OcTreeOctant> cells_that_intersect_ray(Vector3 ray_origin, Vector3 ray_direction);
+    void cells_that_intersect_ray_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOctant> &intersected, Vector3 ray_origin, Vector3 ray_direction);
 	
 
 	Ref<OcTreeOctant> find_neighbor_for_traversal(Ref<OcTreeOctant> octant, int64_t neighbor);

@@ -15,8 +15,9 @@ void OcTree::_bind_methods(){
 	ClassDB::bind_method(D_METHOD("split_on_condition", "condition"), &OcTree::split_on_condition);
     ClassDB::bind_method(D_METHOD("find_depth"), &OcTree::find_depth);
     ClassDB::bind_method(D_METHOD("layout_leaves"), &OcTree::layout_leaves);
-	ClassDB::bind_method(D_METHOD("leaf_that_contains_point"), &OcTree::leaf_that_contains_point);
-	ClassDB::bind_method(D_METHOD("octants_that_intersect_ray", "ray_origin", "ray_direction"), &OcTree::octants_that_intersect_ray);
+	ClassDB::bind_method(D_METHOD("leaf_that_contains_point", "point"), &OcTree::leaf_that_contains_point);
+	ClassDB::bind_method(D_METHOD("cell_that_contains_point", "point", "at_depth"), &OcTree::cell_that_contains_point);
+	ClassDB::bind_method(D_METHOD("cells_that_intersect_ray", "ray_origin", "ray_direction"), &OcTree::cells_that_intersect_ray);
     ClassDB::bind_method(D_METHOD("find_neighbor_for_traversal", "octant", "neighbor"), &OcTree::find_neighbor_for_traversal);
     ClassDB::bind_method(D_METHOD("find_neighbor_of_equal_depth", "octant", "neighbor"), &OcTree::find_neighbor_of_equal_depth);
 	ClassDB::bind_method(D_METHOD("find_neighbors_of_equal_depth", "octant", "neighbors"), &OcTree::find_neighbors_of_equal_depth);
@@ -171,9 +172,14 @@ TypedArray<Dictionary> OcTree::json_serialize(Ref<OcTree> octree){
     return res;
 }
 Ref<godot::OcTree> OcTree::json_deserialize(TypedArray<Dictionary> data){
-    Ref<godot::OcTree> res;
+    if(!data[0].has_key("maximum_depth")){
+        //print err
+        return Ref<godot::OcTree>();
+    }
+
+    
     TypedArray<FlatOcTreeOctant> flat_array;
-    flat_array.resize(data.size()-1);
+    flat_array.resize(data.size()-1);//-1 in assumption of meta
     Ref<FlatOcTreeOctant> flat_octant;
     Dictionary current_dictionary;
     for(int64_t i = 1; i < data.size(); i++){
@@ -186,6 +192,7 @@ Ref<godot::OcTree> OcTree::json_deserialize(TypedArray<Dictionary> data){
     TypedArray<OcTreeOctant> linear = flat_to_linear(flat_array);
 
     Dictionary meta = data[0];
+    Ref<godot::OcTree> res;
     res.instantiate();
     res->root = linear[0];
     res->maximum_depth = meta["maximum_depth"];
@@ -424,24 +431,9 @@ void OcTree::layout_leaves_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOc
 }
 
 Ref<OcTreeOctant> OcTree::leaf_that_contains_point(Vector3 point){
+    if(!get_root()->contains_point(point))
+        return Ref<OcTreeOctant>();
     return leaf_that_contains_point_recursive(get_root(), point);
-}
-
-TypedArray<OcTreeOctant> OcTree::octants_that_intersect_ray(Vector3 ray_origin, Vector3 ray_direction){
-    TypedArray<OcTreeOctant> arr;
-    octants_that_intersect_ray_recursive(get_root(), arr, ray_origin, ray_direction);
-    return arr;
-}
-
-
-void OcTree::octants_that_intersect_ray_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOctant> &intersected, Vector3 ray_origin, Vector3 ray_direction){
-    if(root->slab_test(ray_origin, ray_direction)){
-        if(root->is_leaf())
-            intersected.push_back(root);
-    
-        for(int64_t i = 0; i < root->children.size(); i++)
-            octants_that_intersect_ray_recursive(root->children[i], intersected, ray_origin, ray_direction);
-    }
 }
 
 Ref<OcTreeOctant> OcTree::leaf_that_contains_point_recursive(Ref<OcTreeOctant> root, Vector3 point){
@@ -457,6 +449,47 @@ Ref<OcTreeOctant> OcTree::leaf_that_contains_point_recursive(Ref<OcTreeOctant> r
     }
     return queried;
 }
+
+Ref<OcTreeOctant> OcTree::cell_that_contains_point(Vector3 point, int64_t at_depth){
+    if(!get_root()->contains_point(point))
+        return Ref<OcTreeOctant>();
+    return cell_that_contains_point_recursive(get_root(), point, at_depth);
+}
+
+Ref<OcTreeOctant> OcTree::cell_that_contains_point_recursive(Ref<OcTreeOctant> root, Vector3 point, int64_t at_depth){
+    Ref<OcTreeOctant> queried = root;
+    int64_t depth = 0;
+    while (depth < at_depth){
+        for(int64_t i = 0; i < queried->children.size(); i++){
+            Ref<OcTreeOctant> queried_child = queried->children[i];
+            if(queried_child->contains_point(point)){
+                queried = queried_child;
+                depth++;
+                break;
+            }
+        }
+    }
+    return queried;
+}
+
+TypedArray<OcTreeOctant> OcTree::cells_that_intersect_ray(Vector3 ray_origin, Vector3 ray_direction){
+    TypedArray<OcTreeOctant> arr;
+    cells_that_intersect_ray_recursive(get_root(), arr, ray_origin, ray_direction);
+    return arr;
+}
+
+
+void OcTree::cells_that_intersect_ray_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOctant> &intersected, Vector3 ray_origin, Vector3 ray_direction){
+    if(root->slab_test(ray_origin, ray_direction)){
+        if(root->is_leaf())
+            intersected.push_back(root);
+    
+        for(int64_t i = 0; i < root->children.size(); i++)
+            cells_that_intersect_ray_recursive(root->children[i], intersected, ray_origin, ray_direction);
+    }
+}
+
+
 
 Ref<OcTreeOctant> OcTree::find_neighbor_for_traversal(Ref<OcTreeOctant> octant, int64_t neighbor){
     Ref<OcTreeOctant> query = octant;
@@ -482,7 +515,7 @@ Ref<OcTreeOctant> OcTree::find_neighbor_of_equal_depth(Ref<OcTreeOctant> octant,
         return parent_ref->children[octree_eqd_neighbor_table[selected_octant_position][neighbor][1]];
     }else{
          Ref<OcTreeOctant> parent_neighbor = 
-            find_neighbor_of_equal_depth(octant->parent, n_query);
+            find_neighbor_of_equal_depth(Ref<OcTreeOctant>(octant->parent), n_query);
         if(parent_neighbor.is_null())
             return Ref<OcTreeOctant>();
         return parent_neighbor->children[octree_eqd_neighbor_table[selected_octant_position][neighbor][1]];

@@ -7,17 +7,18 @@ using namespace godot;
 
 void ZOcTree::_bind_methods(){
     ClassDB::bind_static_method("ZOcTree", D_METHOD("create", "total_depth", "initial_octant_center", "initial_octant_span"), &ZOcTree::create);   
+    ClassDB::bind_method(D_METHOD("get_bit_upper_bound"), &ZOcTree::get_bit_upper_bound);
     ClassDB::bind_method(D_METHOD("find_depth"), &ZOcTree::find_depth);
     ClassDB::bind_method(D_METHOD("layout_leaves"), &ZOcTree::layout_leaves);
 	ClassDB::bind_method(D_METHOD("leaf_that_contains_point", "point"), &ZOcTree::leaf_that_contains_point);
-    ClassDB::bind_method(D_METHOD("get_octant_center", "octant"), &ZOcTree::get_octant_center);
-    ClassDB::bind_method(D_METHOD("get_octant_span", "depth"), &ZOcTree::get_octant_span);
-    ClassDB::bind_method(D_METHOD("get_octant_parent", "octant"), &ZOcTree::get_octant_parent);
-    ClassDB::bind_method(D_METHOD("get_octant_children", "octant"), &ZOcTree::get_octant_children);
+	ClassDB::bind_method(D_METHOD("cell_that_contains_point", "point", "at_depth"), &ZOcTree::cell_that_contains_point);
+    ClassDB::bind_method(D_METHOD("get_cell_center", "octant"), &ZOcTree::get_cell_center);
+    ClassDB::bind_method(D_METHOD("get_cell_span", "depth"), &ZOcTree::get_cell_span);
+    ClassDB::bind_method(D_METHOD("get_cell_parent", "octant"), &ZOcTree::get_cell_parent);
+    ClassDB::bind_method(D_METHOD("get_cell_children", "octant"), &ZOcTree::get_cell_children);
     ClassDB::bind_method(D_METHOD("find_neighbor_of_equal_depth", "octant", "neighbor"), &ZOcTree::find_neighbor_of_equal_depth);
 	ClassDB::bind_method(D_METHOD("find_neighbors_of_equal_depth", "octant", "neighbors"), &ZOcTree::find_neighbors_of_equal_depth);
-    ClassDB::bind_method(D_METHOD("find_leaf_neighbors", "octant", "neighbor"), &ZOcTree::find_leaf_neighbors);
-    ClassDB::bind_method(D_METHOD("split", "_total_depth"), &ZOcTree::split);
+    ClassDB::bind_method(D_METHOD("split", "total_depth"), &ZOcTree::split);
 	ClassDB::bind_method(D_METHOD("readjust", "initial_octant_center", "initial_octant_span"), &ZOcTree::readjust);
 	ClassDB::bind_method(D_METHOD("gen_arrays", "at_depth"), &ZOcTree::gen_arrays);
 	ClassDB::bind_method(D_METHOD("gen_z_arrays", "at_depth"), &ZOcTree::gen_z_arrays);
@@ -60,7 +61,7 @@ ZOcTree::~ZOcTree(){
 
 }
 
-Ref<ZOcTree> ZOcTree::create(int64_t _total_depth, Vector3 _initial_octant_center, float _initial_octant_span){
+Ref<ZOcTree> ZOcTree::create(int64_t _total_depth, Vector3 _initial_octant_center, real_t _initial_octant_span){
     Ref<ZOcTree> res;
     res.instantiate();
     res->total_depth = _total_depth;
@@ -117,20 +118,32 @@ int64_t ZOcTree::morton_decode_z(int64_t code){
     return mask_and_contract(code >> 2);
 }
 
-int64_t ZOcTree::floating_to_integral_x(float x){
-    float left = initial_octant_center.x - initial_octant_span;
-    float right = initial_octant_center.x + initial_octant_span;
-    return int((x-left)/(right - left));
+int64_t ZOcTree::floating_to_integral_x(real_t x, int64_t at_depth){
+    if(at_depth > total_depth || at_depth < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::floating_to_integral_x requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return 0;
+    }
+    real_t left = initial_octant_center.x - initial_octant_span;
+    real_t right = initial_octant_center.x + initial_octant_span;
+    return floor((x-left)/(right - left) * (1LL << at_depth));
 }
-int64_t ZOcTree::floating_to_integral_y(float y){
-    float bottom = initial_octant_center.y - initial_octant_span;
-    float top = initial_octant_center.y + initial_octant_span;
-    return int((y-bottom)/(top - bottom));
+int64_t ZOcTree::floating_to_integral_y(real_t y, int64_t at_depth){
+    if(at_depth > total_depth || at_depth < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::floating_to_integral_y requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return 0;
+    }
+    real_t bottom = initial_octant_center.y - initial_octant_span;
+    real_t top = initial_octant_center.y + initial_octant_span;
+    return floor((y-bottom)/(top - bottom) * (1LL << at_depth));
 }
-int64_t ZOcTree::floating_to_integral_z(float z){
-    float back = initial_octant_center.z - initial_octant_span;
-    float forward = initial_octant_center.z + initial_octant_span;
-    return int((z-back)/(forward - back));
+int64_t ZOcTree::floating_to_integral_z(real_t z, int64_t at_depth){
+    if(at_depth > total_depth || at_depth < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::floating_to_integral_z requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return 0;
+    }
+    real_t back = initial_octant_center.z - initial_octant_span;
+    real_t forward = initial_octant_center.z + initial_octant_span;
+    return floor((z-back)/(forward - back) * (1LL << at_depth));
 }
 
 int64_t ZOcTree::find_depth(){
@@ -139,7 +152,7 @@ int64_t ZOcTree::find_depth(){
 TypedArray<ZLocationalCode> ZOcTree::layout_leaves(){
     TypedArray<ZLocationalCode> arr;
     int64_t i = 0;
-    int64_t size = pow(2, total_depth);
+    int64_t size = (1LL << total_depth);
     while(i < cut_and_dilate(size)){
         Ref<ZLocationalCode> z_code;
         z_code.instantiate();
@@ -151,39 +164,64 @@ TypedArray<ZLocationalCode> ZOcTree::layout_leaves(){
     return arr;
 }
 Ref<ZLocationalCode> ZOcTree::leaf_that_contains_point(Vector3 point){
+    if(!(point.x >= initial_octant_center.x-initial_octant_span && point.x <= initial_octant_center.x + initial_octant_span
+        && point.y >= initial_octant_center.y - initial_octant_span && point.y <= initial_octant_center.y + initial_octant_span
+        && point.z >= initial_octant_center.z - initial_octant_span && point.z <= initial_octant_center.z + initial_octant_span)){
+        return Ref<ZLocationalCode>();
+    }
     Ref<ZLocationalCode> z_code;
     z_code.instantiate();
-    z_code->set_morton_code(morton_encode_xyz(floating_to_integral_x(point.x), floating_to_integral_y(point.y), floating_to_integral_z(point.z)));
+    z_code->set_morton_code(morton_encode_xyz(floating_to_integral_x(point.x, total_depth), floating_to_integral_y(point.y, total_depth), floating_to_integral_z(point.z, total_depth)));
     z_code->set_depth(total_depth);
     return z_code;
 }
 
+Ref<ZLocationalCode> ZOcTree::cell_that_contains_point(Vector3 point, int64_t at_depth){
+    if(!(point.x >= initial_octant_center.x-initial_octant_span && point.x <= initial_octant_center.x + initial_octant_span
+        && point.y >= initial_octant_center.y - initial_octant_span && point.y <= initial_octant_center.y + initial_octant_span
+        && point.z >= initial_octant_center.z - initial_octant_span && point.z <= initial_octant_center.z + initial_octant_span)){
+        return Ref<ZLocationalCode>();
+    }
+    if(at_depth > total_depth || at_depth < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::cell_that_contains_point requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return Ref<ZLocationalCode>();
+    }
+    Ref<ZLocationalCode> z_code;
+    z_code.instantiate();
+    z_code->set_morton_code(morton_encode_xyz(floating_to_integral_x(point.x, at_depth), floating_to_integral_y(point.y, at_depth), floating_to_integral_z(point.z, at_depth)));
+    z_code->set_depth(at_depth);
+    return z_code;
+}
 
-Vector3 ZOcTree::get_octant_center(Ref<ZLocationalCode> octant){
+Vector3 ZOcTree::get_cell_center(Ref<ZLocationalCode> octant){
+    if(octant->get_depth() > total_depth || octant->get_depth() < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::get_octant_center requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return Vector3();
+    }
     int64_t integral_x = morton_decode_x(octant->get_morton_code());
     int64_t integral_y = morton_decode_y(octant->get_morton_code());
     int64_t integral_z = morton_decode_z(octant->get_morton_code());
 
-    float octant_span = get_octant_span(octant->get_depth());
+    real_t octant_span = get_cell_span(octant->get_depth());
 
     Vector3 initial_octant_bsw = initial_octant_center - Vector3(initial_octant_span, initial_octant_span, initial_octant_span);
 
     return initial_octant_bsw + Vector3(integral_x * 2*octant_span + octant_span, integral_y * 2*octant_span + octant_span, integral_z * 2*octant_span + octant_span);
 }
-float ZOcTree::get_octant_span(int64_t depth){
-    return initial_octant_span / pow(2, depth);
+real_t ZOcTree::get_cell_span(int64_t depth){
+    return initial_octant_span / (1LL << depth);
 }
 
-Ref<ZLocationalCode> ZOcTree::get_octant_parent(Ref<ZLocationalCode> octant){
+Ref<ZLocationalCode> ZOcTree::get_cell_parent(Ref<ZLocationalCode> octant){
+    if(octant->get_depth() > total_depth || octant->get_depth() < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::get_octant_parent requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return Ref<ZLocationalCode>();
+    }
     if(octant->get_depth() == 0)
         return Ref<ZLocationalCode>();
 
     int64_t parent_depth = octant->get_depth()-1;
-    int64_t size = pow(2, parent_depth);
-    
-    int64_t mask = cut_and_dilate(size)-1;
-
-    int64_t new_code = octant->get_morton_code() & mask;
+    int64_t new_code = octant->get_morton_code() >> 3;
 
     Ref<ZLocationalCode> z_code;
     z_code.instantiate();
@@ -191,9 +229,14 @@ Ref<ZLocationalCode> ZOcTree::get_octant_parent(Ref<ZLocationalCode> octant){
     z_code->set_depth(parent_depth);
     return z_code;
 }
-TypedArray<ZLocationalCode> ZOcTree::get_octant_children(Ref<ZLocationalCode> octant){
+TypedArray<ZLocationalCode> ZOcTree::get_cell_children(Ref<ZLocationalCode> octant){
+    if(octant->get_depth() > total_depth || octant->get_depth() < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::get_octant_children requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return TypedArray<ZLocationalCode>();
+    }
     if(octant->get_depth() == total_depth)
         return TypedArray<ZLocationalCode>();
+    
     TypedArray<ZLocationalCode> arr;
 
     int64_t current_code = octant->get_morton_code();
@@ -202,7 +245,7 @@ TypedArray<ZLocationalCode> ZOcTree::get_octant_children(Ref<ZLocationalCode> oc
     for(int64_t i = 0; i < 8; i++){
         Ref<ZLocationalCode> z_code;
         z_code.instantiate();
-        z_code->set_morton_code(current_code+i);
+        z_code->set_morton_code((current_code << 3) | i);
         z_code->set_depth(child_depth);
         arr.push_back(z_code);
     }
@@ -212,79 +255,116 @@ TypedArray<ZLocationalCode> ZOcTree::get_octant_children(Ref<ZLocationalCode> oc
 
 Ref<ZLocationalCode> ZOcTree::find_neighbor_of_equal_depth(Ref<ZLocationalCode> octant, int64_t neighbor){
     int64_t current_depth = octant->get_depth();
+    if(current_depth > total_depth || current_depth < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::find_neighbor_of_equal_depth requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return Ref<ZLocationalCode>();
+    }
     if(current_depth==0)
+        return Ref<ZLocationalCode>();
+    
+    int64_t morton_code;
+    switch (neighbor){
+        case OCTANT_NEIGHBOR::OCTANT_BELOW_SOUTH_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_BELOW_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_BELOW_NORTH_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, -1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_BELOW_NORTH:
+            morton_code = (morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_BELOW:
+            morton_code = (morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_BELOW_SOUTH:
+            morton_code = (morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_BELOW_SOUTH_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_BELOW_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_BELOW_NORTH_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, -1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_SOUTH_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_NORTH_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_NORTH:
+            morton_code = (morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_SOUTH:
+            morton_code = (morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_SOUTH_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_NORTH_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE_SOUTH_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE_NORTH_WEST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE_NORTH:
+            morton_code = (morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE:
+            morton_code = (morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE_SOUTH:
+            morton_code = (morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE_SOUTH_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1));
+            break;
+        case OCTANT_NEIGHBOR::OCTANT_ABOVE_NORTH_EAST:
+            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1), current_depth, 1));
+            break;
+        default:
+            morton_code = (-1);
+            break;
+    }
+    if(morton_code == -1)
         return Ref<ZLocationalCode>();
     Ref<ZLocationalCode> z_code;
     z_code.instantiate();
+    z_code->set_morton_code(morton_code);
     z_code->set_depth(current_depth);
-    switch (neighbor){
-        case OCTANT_NEIGHBOR::OCTANT_BELOW_SOUTH_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_BELOW_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_BELOW_NORTH_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, -1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_BELOW_NORTH:
-            z_code->set_morton_code(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_BELOW:
-            z_code->set_morton_code(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_BELOW_SOUTH:
-            z_code->set_morton_code(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_BELOW_SOUTH_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_BELOW_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_BELOW_NORTH_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, -1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_SOUTH_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_NORTH_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_NORTH:
-            z_code->set_morton_code(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_SOUTH:
-            z_code->set_morton_code(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_SOUTH_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_NORTH_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE_SOUTH_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE_NORTH_WEST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE_NORTH:
-            z_code->set_morton_code(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE:
-            z_code->set_morton_code(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE_SOUTH:
-            z_code->set_morton_code(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE_SOUTH_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, -1), current_depth, 1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1));
-        case OCTANT_NEIGHBOR::OCTANT_ABOVE_NORTH_EAST:
-            z_code->set_morton_code(morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(morton_add_z_and_null_out_of_domain(octant->get_morton_code(), current_depth, 1), current_depth, 1), current_depth, 1));
-        default:
-            z_code->set_morton_code(-1);
-    }
     return z_code;
 }
 TypedArray<ZLocationalCode> ZOcTree::find_neighbors_of_equal_depth(Ref<ZLocationalCode> octant, PackedInt64Array neighbors){
+    if(octant->get_depth() > total_depth || octant->get_depth() < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::find_neighbors_of_equal_depth requires an octant with depth in the bounds of 0 and ZOcTree::find_depth()");
+        return TypedArray<ZLocationalCode>();
+    }
     TypedArray<ZLocationalCode> arr;
     arr.resize(neighbors.size());
     for(int64_t i = 0; i < neighbors.size(); i++){
         arr[i] = find_neighbor_of_equal_depth(octant, (OCTANT_NEIGHBOR) ((int64_t) neighbors[i]));
     }
     return arr;
-}
-TypedArray<ZLocationalCode> ZOcTree::find_leaf_neighbors(Ref<ZLocationalCode> octant, int64_t neighbor){
-    return TypedArray<ZLocationalCode>();
 }
 
 int64_t ZOcTree::morton_add_x_and_null_out_of_domain(int64_t code, int64_t depth, int64_t term){
@@ -302,7 +382,7 @@ int64_t ZOcTree::morton_add_x_and_null_out_of_domain(int64_t code, int64_t depth
     }
     else{
         int64_t res = (code | (((code | 0b000110110110110110110110110110110110110110110110110110110110110) + term) & 0b000001001001001001001001001001001001001001001001001001001001001));
-        if(res > pow(2, depth))
+        if(res > (1LL << depth))
             return -1;
         else
             return res;
@@ -323,7 +403,7 @@ int64_t ZOcTree::morton_add_y_and_null_out_of_domain(int64_t code, int64_t depth
     }
     else{
         int64_t res = (code | (((code | 0b000101101101101101101101101101101101101101101101101101101101101) + term) & 0b000010010010010010010010010010010010010010010010010010010010010));
-        if(res > pow(2, depth))
+        if(res > (1LL << depth))
             return -1;
         else
             return res;
@@ -344,7 +424,7 @@ int64_t ZOcTree::morton_add_z_and_null_out_of_domain(int64_t code, int64_t depth
     }
     else{
         int64_t res = (code | (((code | 0b000011011011011011011011011011011011011011011011011011011011011) + term) & 0b000100100100100100100100100100100100100100100100100100100100100));
-        if(res > pow(2, depth))
+        if(res > (1LL << depth))
             return -1;
         else
             return res;
@@ -352,21 +432,31 @@ int64_t ZOcTree::morton_add_z_and_null_out_of_domain(int64_t code, int64_t depth
 }
 
 void ZOcTree::split(int64_t _total_depth){
+    if(_total_depth > ZOCTREE_UPPERBOUND){
+        ERR_PRINT_ONCE("Method ZOcTree::split requires a total depth less than or equal to 19");
+        return;
+    }
+
     total_depth = _total_depth;
 }
-void ZOcTree::readjust(Vector3 _initial_octant_center, float _initial_octant_span){
+void ZOcTree::readjust(Vector3 _initial_octant_center, real_t _initial_octant_span){
     initial_octant_center = _initial_octant_center;
     initial_octant_span = _initial_octant_span;
 }
 
 Array ZOcTree::gen_arrays(int64_t at_depth){
-   PackedVector3Array vertices;
+    if(at_depth > total_depth || at_depth < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::gen_arrays requires a depth in the bounds of 0 and ZOcTree::find_depth()");
+        return Array();
+    }
+
+    PackedVector3Array vertices;
 
     Vector3 initial_octant_bsw = initial_octant_center - Vector3(initial_octant_span, initial_octant_span, initial_octant_span);
 
-    int64_t size = pow(2, at_depth);
+    int64_t size = (1LL << at_depth);
 
-    float span = get_octant_span(at_depth);
+    real_t span = get_cell_span(at_depth);
 
     //Uniform grid construction
 
@@ -407,17 +497,21 @@ Array ZOcTree::gen_arrays(int64_t at_depth){
     return arr;
 }
 Array ZOcTree::gen_z_arrays(int64_t at_depth){
+    if(at_depth > total_depth || at_depth < 0){
+        ERR_PRINT_ONCE("Method ZOcTree::gen_z_arrays requires a depth in the bounds of 0 and ZOcTree::find_depth()");
+        return Array();
+    }
     PackedVector3Array vertices;
     PackedInt32Array indices;
 
-    int64_t size = pow(2, at_depth);
+    int64_t size = (1LL << at_depth);
     int64_t i = 0;
     while(i < cut_and_dilate(size)){
         Ref<ZLocationalCode> z_code;
         z_code.instantiate();
         z_code->set_morton_code(i);
         z_code->set_depth(at_depth);
-        vertices.push_back(get_octant_center(z_code));
+        vertices.push_back(get_cell_center(z_code));
         i++;
     }
 
