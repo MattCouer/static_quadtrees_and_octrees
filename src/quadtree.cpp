@@ -16,8 +16,13 @@ void QuadTree::_bind_methods(){
 	ClassDB::bind_method(D_METHOD("split_on_condition", "condition"), &QuadTree::split_on_condition);
     ClassDB::bind_method(D_METHOD("find_depth"), &QuadTree::find_depth);
     ClassDB::bind_method(D_METHOD("layout_leaves"), &QuadTree::layout_leaves);
+    ClassDB::bind_method(D_METHOD("layout_level", "at_depth"), &QuadTree::layout_level);
 	ClassDB::bind_method(D_METHOD("leaf_that_contains_point", "point"), &QuadTree::leaf_that_contains_point);
 	ClassDB::bind_method(D_METHOD("cell_that_contains_point", "point", "at_depth"), &QuadTree::cell_that_contains_point);
+    ClassDB::bind_method(D_METHOD("leaves_in_radius", "center", "radius"), &QuadTree::leaves_in_radius);
+	ClassDB::bind_method(D_METHOD("leaves_in_bounding_box", "center", "span"), &QuadTree::leaves_in_bounding_box);
+	ClassDB::bind_method(D_METHOD("cells_in_radius", "center", "radius", "at_depth"), &QuadTree::cells_in_radius);
+	ClassDB::bind_method(D_METHOD("cells_in_bounding_box", "center", "span", "at_depth"), &QuadTree::cells_in_bounding_box);
 	ClassDB::bind_method(D_METHOD("cells_that_intersect_ray", "ray_origin", "ray_direction"), &QuadTree::cells_that_intersect_ray);
     ClassDB::bind_method(D_METHOD("find_neighbor_for_traversal", "quadrant", "neighbor"), &QuadTree::find_neighbor_for_traversal);
     ClassDB::bind_method(D_METHOD("find_neighbor_of_equal_depth", "quadrant", "neighbor"), &QuadTree::find_neighbor_of_equal_depth);
@@ -43,6 +48,7 @@ void QuadTree::_bind_methods(){
     BIND_ENUM_CONSTANT(QUADRANT_SOUTH_EAST);
     BIND_ENUM_CONSTANT(QUADRANT_EAST);
     BIND_ENUM_CONSTANT(QUADRANT_NORTH_EAST);
+    BIND_ENUM_CONSTANT(QUADRANT_NEIGHBOR_MAX);
 
     //VIRTUAL METHODS
     GDVIRTUAL_BIND(_generate_meta_dictionary);
@@ -369,6 +375,30 @@ void QuadTree::layout_leaves_recursive(Ref<QuadTreeQuadrant> root, TypedArray<Qu
     }
 }
 
+TypedArray<QuadTreeQuadrant> QuadTree::layout_level(int64_t at_depth){
+    TypedArray<QuadTreeQuadrant> arr;
+    layout_level_recursive(get_root(), at_depth, arr);
+    return arr;
+}
+void QuadTree::layout_level_recursive(Ref<QuadTreeQuadrant> root, int64_t at_depth, TypedArray<QuadTreeQuadrant>& arr){
+    Ref<QuadTreeQuadrant> current = root;
+    uint64_t depth = 0;
+    while(!(current->is_root())){
+        depth++;
+        current = Ref<QuadTreeQuadrant>(current->parent);
+    }
+
+    if (depth == at_depth)
+        arr.push_back(root);
+        return;
+    
+    TypedArray<QuadTreeQuadrant> root_children = root->children;
+
+    for(int64_t i = 0; i < root_children.size(); i++){
+        Ref<QuadTreeQuadrant> root_child = root_children[i];
+        layout_level_recursive(root_child, at_depth, arr);
+    }
+}
 
 Ref<QuadTreeQuadrant> QuadTree::leaf_that_contains_point(Vector2 point){
     if(!get_root()->contains_point(point))
@@ -408,6 +438,71 @@ Ref<QuadTreeQuadrant> QuadTree::cell_that_contains_point_recursive(Ref<QuadTreeQ
         }
     }
     return queried;
+}
+
+TypedArray<QuadTreeQuadrant> QuadTree::leaves_in_radius(Vector2 center, real_t radius){
+    TypedArray<QuadTreeQuadrant> res;
+    
+    TypedArray<QuadTreeQuadrant> leaves = layout_leaves();
+
+    for(int64_t i = 0; i < leaves.size(); i++){
+        Ref<QuadTreeQuadrant> cell = leaves[i];
+        if(cell->center.distance_to(center) <= radius){
+            res.push_back(cell);
+        }
+    }
+
+    return res;
+}
+TypedArray<QuadTreeQuadrant> QuadTree::leaves_in_bounding_box(Vector2 center, real_t span){
+    TypedArray<QuadTreeQuadrant> res;
+    
+    TypedArray<QuadTreeQuadrant> leaves = layout_leaves();
+
+    for(int64_t i = 0; i < leaves.size(); i++){
+        Ref<QuadTreeQuadrant> cell = leaves[i];
+        if(cell->center.x - cell->span >= center.x - span &&
+            cell->center.x + cell->span <= center.x + span &&
+            cell->center.y - cell->span >= center.y - span &&
+            cell->center.y + cell->span <= center.y + span){
+                res.push_back(cell);
+        }
+    }
+    
+    return res;
+}
+
+
+TypedArray<QuadTreeQuadrant> QuadTree::cells_in_radius(Vector2 center, real_t radius, int64_t at_depth){
+    TypedArray<QuadTreeQuadrant> res;
+    
+    TypedArray<QuadTreeQuadrant> eqd_cells = layout_level(at_depth);
+
+    for(int64_t i = 0; i < eqd_cells.size(); i++){
+        Ref<QuadTreeQuadrant> cell = eqd_cells[i];
+        if(cell->center.distance_to(center) <= radius){
+            res.push_back(cell);
+        }
+    }
+
+    return res;
+}
+TypedArray<QuadTreeQuadrant> QuadTree::cells_in_bounding_box(Vector2 center, real_t span, int64_t at_depth){
+    TypedArray<QuadTreeQuadrant> res;
+    
+    TypedArray<QuadTreeQuadrant> eqd_cells = layout_level(at_depth);
+
+    for(int64_t i = 0; i < eqd_cells.size(); i++){
+        Ref<QuadTreeQuadrant> cell = eqd_cells[i];
+        if(cell->center.x - cell->span >= center.x - span &&
+            cell->center.x + cell->span <= center.x + span &&
+            cell->center.y - cell->span >= center.y - span &&
+            cell->center.y + cell->span <= center.y + span){
+                res.push_back(cell);
+        }
+    }
+    
+    return res;
 }
 
 TypedArray<QuadTreeQuadrant> QuadTree::cells_that_intersect_ray(Vector2 ray_origin, Vector2 ray_direction){
@@ -452,12 +547,13 @@ Ref<QuadTreeQuadrant> QuadTree::find_neighbor_of_equal_depth(Ref<QuadTreeQuadran
     int64_t n_query = quadtree_eqd_neighbor_table[selected_quadrant_position][neighbor][0];
 
     if(n_query == -1){
-        Ref<QuadTreeQuadrant> parent_neighbor = find_neighbor_of_equal_depth(Ref<QuadTreeQuadrant>(quadrant->parent), neighbor);
+        return parent_ref->children[quadtree_eqd_neighbor_table[selected_quadrant_position][neighbor][1]];
+    }else{
+         Ref<QuadTreeQuadrant> parent_neighbor = 
+            find_neighbor_of_equal_depth(parent_ref, n_query);
         if(parent_neighbor.is_null())
             return Ref<QuadTreeQuadrant>();
         return parent_neighbor->children[quadtree_eqd_neighbor_table[selected_quadrant_position][neighbor][1]];
-    }else{
-        return parent_ref->children[quadtree_eqd_neighbor_table[selected_quadrant_position][neighbor][0]];
     }
 }
 

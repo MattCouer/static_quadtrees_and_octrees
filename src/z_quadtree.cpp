@@ -8,6 +8,7 @@ void ZQuadTree::_bind_methods(){
     ClassDB::bind_method(D_METHOD("get_bit_upper_bound"), &ZQuadTree::get_bit_upper_bound);
     ClassDB::bind_method(D_METHOD("find_depth"), &ZQuadTree::find_depth);
     ClassDB::bind_method(D_METHOD("layout_leaves"), &ZQuadTree::layout_leaves);
+    ClassDB::bind_method(D_METHOD("layout_level", "at_depth"), &ZQuadTree::layout_level);
 	ClassDB::bind_method(D_METHOD("leaf_that_contains_point", "point"), &ZQuadTree::leaf_that_contains_point);
 	ClassDB::bind_method(D_METHOD("cell_that_contains_point", "point", "at_depth"), &ZQuadTree::cell_that_contains_point);
     ClassDB::bind_method(D_METHOD("get_cell_center", "quadrant"), &ZQuadTree::get_cell_center);
@@ -32,6 +33,7 @@ void ZQuadTree::_bind_methods(){
     BIND_ENUM_CONSTANT(QUADRANT_SOUTH_EAST);
     BIND_ENUM_CONSTANT(QUADRANT_EAST);
     BIND_ENUM_CONSTANT(QUADRANT_NORTH_EAST);
+    BIND_ENUM_CONSTANT(QUADRANT_NEIGHBOR_MAX);
 
 }
 
@@ -130,6 +132,21 @@ TypedArray<ZLocationalCode> ZQuadTree::layout_leaves(){
         z_code.instantiate();
         z_code->set_morton_code(i);
         z_code->set_depth(total_depth);
+        arr.push_back(z_code);
+        i++;
+    }
+    return arr;
+}
+
+TypedArray<ZLocationalCode> ZQuadTree::layout_level(int64_t at_depth){
+    TypedArray<ZLocationalCode> arr;
+    int64_t i = 0;
+    int64_t size = (1LL << at_depth);
+    while(i < cut_and_dilate(size)){
+        Ref<ZLocationalCode> z_code;
+        z_code.instantiate();
+        z_code->set_morton_code(i);
+        z_code->set_depth(at_depth);
         arr.push_back(z_code);
         i++;
     }
@@ -240,41 +257,42 @@ Ref<ZLocationalCode> ZQuadTree::find_neighbor_of_equal_depth(Ref<ZLocationalCode
     }
     if(current_depth==0)
         return Ref<ZLocationalCode>();
-    int64_t morton_code;
+    int64_t current_code = quadrant->get_morton_code();
+    int64_t new_morton_code;
     switch (neighbor){
         case QUADRANT_NEIGHBOR::QUADRANT_SOUTH_WEST:
-            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(quadrant->get_morton_code(), current_depth, -1), current_depth, -1));
+            new_morton_code = morton_add_and_null_out_of_domain(current_code, -1, -1, current_depth);
             break;
         case QUADRANT_NEIGHBOR::QUADRANT_WEST:
-            morton_code = (morton_add_x_and_null_out_of_domain(quadrant->get_morton_code(), current_depth, -1));
+            new_morton_code = morton_add_and_null_out_of_domain(current_code, -1, 0, current_depth);
             break;
         case QUADRANT_NEIGHBOR::QUADRANT_NORTH_WEST:
-            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(quadrant->get_morton_code(),current_depth, 1),current_depth, -1));
+            new_morton_code = morton_add_and_null_out_of_domain(current_code, -1, 1, current_depth);
             break;
         case QUADRANT_NEIGHBOR::QUADRANT_NORTH:
-            morton_code = (morton_add_y_and_null_out_of_domain(quadrant->get_morton_code(),current_depth, 1));
+            new_morton_code = morton_add_and_null_out_of_domain(current_code, 0, 1, current_depth);
             break;
         case QUADRANT_NEIGHBOR::QUADRANT_SOUTH:
-            morton_code = (morton_add_y_and_null_out_of_domain(quadrant->get_morton_code(),current_depth, -1));
+            new_morton_code = morton_add_and_null_out_of_domain(current_code, 0, -1, current_depth);
             break;
         case QUADRANT_NEIGHBOR::QUADRANT_SOUTH_EAST:
-            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(quadrant->get_morton_code(),current_depth, -1),current_depth, 1));
+            new_morton_code = morton_add_and_null_out_of_domain(current_code, 1, -1, current_depth);
             break;
         case QUADRANT_NEIGHBOR::QUADRANT_EAST:
-            morton_code = (morton_add_x_and_null_out_of_domain(quadrant->get_morton_code(),current_depth, 1));
+            new_morton_code = morton_add_and_null_out_of_domain(current_code, 1, 0, current_depth);
             break;
         case QUADRANT_NEIGHBOR::QUADRANT_NORTH_EAST:
-            morton_code = (morton_add_x_and_null_out_of_domain(morton_add_y_and_null_out_of_domain(quadrant->get_morton_code(),current_depth, 1),current_depth, 1));
+            new_morton_code = morton_add_and_null_out_of_domain(current_code, 1, 1, current_depth);
             break;
         default:
-            morton_code = (-1);
+        new_morton_code = (-1);
             break;
     }
-    if(morton_code == -1)
+    if(new_morton_code == -1)
         return Ref<ZLocationalCode>();
     Ref<ZLocationalCode> z_code;
     z_code.instantiate();
-    z_code->set_morton_code(morton_code);
+    z_code->set_morton_code(new_morton_code);
     z_code->set_depth(current_depth);
     return z_code;
 }
@@ -291,47 +309,17 @@ TypedArray<ZLocationalCode> ZQuadTree::find_neighbors_of_equal_depth(Ref<ZLocati
     return arr;
 }
 
-int64_t ZQuadTree::morton_add_x_and_null_out_of_domain(int64_t code, int64_t depth, int64_t term){
+int64_t ZQuadTree::morton_add_and_null_out_of_domain(int64_t code, int64_t x_term, int64_t y_term, int64_t depth){
     if(code < 0)
         return -1;
-    if(term == 0)
-        return code;
-    if(term < 0){
-        int64_t sub = ((code & 0b000000001010101010101010101010101010101010101010101010101010101) - term) & 0b000000001010101010101010101010101010101010101010101010101010101;
-        int64_t res = ((code & 0b000000010101010101010101010101010101010101010101010101010101010) | sub);
-        if(res < 0)
-            return -1;
-        else
-            return res;
-    }
-    else{
-        int64_t res = (code | (((code | 0b000000010101010101010101010101010101010101010101010101010101010) + term) & 0b000000001010101010101010101010101010101010101010101010101010101));
-        if(res > (1LL << depth))
-            return -1;
-        else
-            return res;
-    }
-}
+    
+    int64_t new_x = morton_decode_x(code) + x_term;
+    int64_t new_y = morton_decode_y(code) + y_term;
 
-int64_t ZQuadTree::morton_add_y_and_null_out_of_domain(int64_t code, int64_t depth, int64_t term){
-    if(code < 0)
+    if(new_x < 0 || new_y < 0 || new_x > (1LL << (depth))-1 || new_y > (1LL << (depth))-1)
         return -1;
-    if(term == 0)
-        return code;
-    if(term < 0){
-        int64_t sub = ((code & 0b000000010101010101010101010101010101010101010101010101010101010) - term) & 0b000000010101010101010101010101010101010101010101010101010101010;
-        int64_t res = ((code & 0b000000001010101010101010101010101010101010101010101010101010101) | sub);
-        if(res < 0)
-            return -1;
-        else
-            return res;
-    }else{
-        int64_t res = (code | (((code | 0b000000001010101010101010101010101010101010101010101010101010101) + term) & 0b000000010101010101010101010101010101010101010101010101010101010));
-        if(res > (1LL << depth))
-            return -1;
-        else
-            return res;
-    }
+
+    return morton_encode_xy(new_x, new_y);
 }
 
 void ZQuadTree::split(int64_t _total_depth){

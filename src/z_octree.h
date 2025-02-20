@@ -50,6 +50,7 @@ public:
 
 	int64_t find_depth();
 	TypedArray<ZLocationalCode> layout_leaves();
+    TypedArray<ZLocationalCode> layout_level(int64_t at_depth);
 	Ref<ZLocationalCode> leaf_that_contains_point(Vector3 point);
     Ref<ZLocationalCode> cell_that_contains_point(Vector3 point, int64_t at_depth);
     // TypedArray<ZLocationalCode> simple_octants_that_intersect_ray(int64_t depth, Vector3 ray_origin, Vector3 ray_direction);
@@ -64,9 +65,8 @@ public:
 	TypedArray<ZLocationalCode> find_neighbors_of_equal_depth(Ref<ZLocationalCode> octant, PackedInt64Array neighbors);
 	// TypedArray<ZLocationalCode> find_leaf_neighbors(Ref<ZLocationalCode> octant, int64_t neighbor);
 
-    int64_t morton_add_x_and_null_out_of_domain(int64_t x, int64_t depth, int64_t term);
-    int64_t morton_add_y_and_null_out_of_domain(int64_t y, int64_t depth, int64_t term);
-    int64_t morton_add_z_and_null_out_of_domain(int64_t z, int64_t depth, int64_t term);
+    int64_t morton_add_and_null_out_of_domain(int64_t code, int64_t x_term, int64_t y_term, int64_t z_term, int64_t depth);
+
 
     void split(int64_t _total_depth);
     void readjust(Vector3 _initial_octant_center, real_t _initial_octant_span);

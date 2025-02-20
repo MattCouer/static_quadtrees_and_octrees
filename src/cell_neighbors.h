@@ -16,8 +16,8 @@ namespace godot {
     QUADRANT_SOUTH_EAST,
     QUADRANT_EAST,
     QUADRANT_NORTH_EAST,
+    QUADRANT_NEIGHBOR_MAX
     };
-
 
     enum OCTANT_NEIGHBOR {	
     OCTANT_BELOW_SOUTH_WEST,
@@ -46,6 +46,7 @@ namespace godot {
     OCTANT_ABOVE_SOUTH_EAST,
     OCTANT_ABOVE_EAST,
     OCTANT_ABOVE_NORTH_EAST,
+    OCTANT_NEIGHBOR_MAX
     };
 
     

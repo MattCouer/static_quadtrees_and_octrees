@@ -15,8 +15,13 @@ void OcTree::_bind_methods(){
 	ClassDB::bind_method(D_METHOD("split_on_condition", "condition"), &OcTree::split_on_condition);
     ClassDB::bind_method(D_METHOD("find_depth"), &OcTree::find_depth);
     ClassDB::bind_method(D_METHOD("layout_leaves"), &OcTree::layout_leaves);
+    ClassDB::bind_method(D_METHOD("layout_level", "at_depth"), &OcTree::layout_level);
 	ClassDB::bind_method(D_METHOD("leaf_that_contains_point", "point"), &OcTree::leaf_that_contains_point);
 	ClassDB::bind_method(D_METHOD("cell_that_contains_point", "point", "at_depth"), &OcTree::cell_that_contains_point);
+    ClassDB::bind_method(D_METHOD("leaves_in_radius", "center", "radius"), &OcTree::leaves_in_radius);
+	ClassDB::bind_method(D_METHOD("leaves_in_bounding_box", "center", "span"), &OcTree::leaves_in_bounding_box);
+	ClassDB::bind_method(D_METHOD("cells_in_radius", "center", "radius", "at_depth"), &OcTree::cells_in_radius);
+	ClassDB::bind_method(D_METHOD("cells_in_bounding_box", "center", "span", "at_depth"), &OcTree::cells_in_bounding_box);
 	ClassDB::bind_method(D_METHOD("cells_that_intersect_ray", "ray_origin", "ray_direction"), &OcTree::cells_that_intersect_ray);
     ClassDB::bind_method(D_METHOD("find_neighbor_for_traversal", "octant", "neighbor"), &OcTree::find_neighbor_for_traversal);
     ClassDB::bind_method(D_METHOD("find_neighbor_of_equal_depth", "octant", "neighbor"), &OcTree::find_neighbor_of_equal_depth);
@@ -58,6 +63,7 @@ void OcTree::_bind_methods(){
     BIND_ENUM_CONSTANT(OCTANT_ABOVE_SOUTH_EAST);
     BIND_ENUM_CONSTANT(OCTANT_ABOVE_EAST);
     BIND_ENUM_CONSTANT(OCTANT_ABOVE_NORTH_EAST);
+    BIND_ENUM_CONSTANT(OCTANT_NEIGHBOR_MAX);
 
     //VIRTUAL METHODS
     GDVIRTUAL_BIND(_generate_meta_dictionary);
@@ -430,6 +436,30 @@ void OcTree::layout_leaves_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOc
     }
 }
 
+TypedArray<OcTreeOctant> OcTree::layout_level(int64_t at_depth){
+    TypedArray<OcTreeOctant> arr;
+    layout_level_recursive(get_root(), at_depth, arr);
+    return arr;
+}
+void OcTree::layout_level_recursive(Ref<OcTreeOctant> root, int64_t at_depth, TypedArray<OcTreeOctant>& arr){
+    Ref<OcTreeOctant> current = root;
+    uint64_t depth = 0;
+    while(!(current->is_root())){
+        depth++;
+        current = Ref<OcTreeOctant>(current->parent);
+    }
+
+    if (depth == at_depth)
+        arr.push_back(root);
+    
+    TypedArray<OcTreeOctant> root_children = root->children;
+
+    for(int64_t i = 0; i < root_children.size(); i++){
+        Ref<OcTreeOctant> root_child = root_children[i];
+        layout_level_recursive(root_child, at_depth, arr);
+    }
+}
+
 Ref<OcTreeOctant> OcTree::leaf_that_contains_point(Vector3 point){
     if(!get_root()->contains_point(point))
         return Ref<OcTreeOctant>();
@@ -471,6 +501,76 @@ Ref<OcTreeOctant> OcTree::cell_that_contains_point_recursive(Ref<OcTreeOctant> r
     }
     return queried;
 }
+
+TypedArray<OcTreeOctant> OcTree::leaves_in_radius(Vector3 center, real_t radius){
+    TypedArray<OcTreeOctant> res;
+    
+    TypedArray<OcTreeOctant> leaves = layout_leaves();
+
+    for(int64_t i = 0; i < leaves.size(); i++){
+        Ref<OcTreeOctant> cell = leaves[i];
+        if(cell->center.distance_to(center) <= radius){
+            res.push_back(cell);
+        }
+    }
+
+    return res;
+}
+TypedArray<OcTreeOctant> OcTree::leaves_in_bounding_box(Vector3 center, real_t span){
+    TypedArray<OcTreeOctant> res;
+    
+    TypedArray<OcTreeOctant> leaves = layout_leaves();
+
+    for(int64_t i = 0; i < leaves.size(); i++){
+        Ref<OcTreeOctant> cell = leaves[i];
+        if(cell->center.x - cell->span >= center.x - span &&
+            cell->center.x + cell->span <= center.x + span &&
+            cell->center.y - cell->span >= center.y - span &&
+            cell->center.y + cell->span <= center.y + span &&
+            cell->center.z - cell->span >= center.z - span &&
+            cell->center.z + cell->span <= center.z + span){
+                res.push_back(cell);
+        }
+    }
+    
+    return res;
+}
+
+
+TypedArray<OcTreeOctant> OcTree::cells_in_radius(Vector3 center, real_t radius, int64_t at_depth){
+    TypedArray<OcTreeOctant> res;
+    
+    TypedArray<OcTreeOctant> eqd_cells = layout_level(at_depth);
+
+    for(int64_t i = 0; i < eqd_cells.size(); i++){
+        Ref<OcTreeOctant> cell = eqd_cells[i];
+        if(cell->center.distance_to(center) <= radius){
+            res.push_back(cell);
+        }
+    }
+
+    return res;
+}
+TypedArray<OcTreeOctant> OcTree::cells_in_bounding_box(Vector3 center, real_t span, int64_t at_depth){
+    TypedArray<OcTreeOctant> res;
+    
+    TypedArray<OcTreeOctant> eqd_cells = layout_level(at_depth);
+
+    for(int64_t i = 0; i < eqd_cells.size(); i++){
+        Ref<OcTreeOctant> cell = eqd_cells[i];
+        if(cell->center.x - cell->span >= center.x - span &&
+            cell->center.x + cell->span <= center.x + span &&
+            cell->center.y - cell->span >= center.y - span &&
+            cell->center.y + cell->span <= center.y + span &&
+            cell->center.z - cell->span >= center.z - span &&
+            cell->center.z + cell->span <= center.z + span){
+                res.push_back(cell);
+        }
+    }
+    
+    return res;
+}
+
 
 TypedArray<OcTreeOctant> OcTree::cells_that_intersect_ray(Vector3 ray_origin, Vector3 ray_direction){
     TypedArray<OcTreeOctant> arr;
@@ -515,7 +615,7 @@ Ref<OcTreeOctant> OcTree::find_neighbor_of_equal_depth(Ref<OcTreeOctant> octant,
         return parent_ref->children[octree_eqd_neighbor_table[selected_octant_position][neighbor][1]];
     }else{
          Ref<OcTreeOctant> parent_neighbor = 
-            find_neighbor_of_equal_depth(Ref<OcTreeOctant>(octant->parent), n_query);
+            find_neighbor_of_equal_depth(parent_ref, n_query);
         if(parent_neighbor.is_null())
             return Ref<OcTreeOctant>();
         return parent_neighbor->children[octree_eqd_neighbor_table[selected_octant_position][neighbor][1]];

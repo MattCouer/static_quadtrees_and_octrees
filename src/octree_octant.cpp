@@ -6,8 +6,8 @@ using namespace godot;
 void OcTreeOctant::_bind_methods(){
     ClassDB::bind_method(D_METHOD("is_root"), &OcTreeOctant::is_root);
 	ClassDB::bind_method(D_METHOD("is_leaf"), &OcTreeOctant::is_leaf);
-    ClassDB::bind_method(D_METHOD("contains_point"), &OcTreeOctant::contains_point);
-	ClassDB::bind_method(D_METHOD("contains_region"), &OcTreeOctant::contains_region);
+    ClassDB::bind_method(D_METHOD("contains_point", "point"), &OcTreeOctant::contains_point);
+	ClassDB::bind_method(D_METHOD("contains_region", "region"), &OcTreeOctant::contains_region);
     ClassDB::bind_method(D_METHOD("get_center"), &OcTreeOctant::get_center);
 	ClassDB::bind_method(D_METHOD("set_center", "center"), &OcTreeOctant::set_center);
     ClassDB::bind_method(D_METHOD("get_span"), &OcTreeOctant::get_span);

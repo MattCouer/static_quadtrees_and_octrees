@@ -7,8 +7,8 @@ using namespace godot;
 void QuadTreeQuadrant::_bind_methods(){
     ClassDB::bind_method(D_METHOD("is_root"), &QuadTreeQuadrant::is_root);
 	ClassDB::bind_method(D_METHOD("is_leaf"), &QuadTreeQuadrant::is_leaf);
-    ClassDB::bind_method(D_METHOD("contains_point"), &QuadTreeQuadrant::contains_point);
-	ClassDB::bind_method(D_METHOD("contains_region"), &QuadTreeQuadrant::contains_region);
+    ClassDB::bind_method(D_METHOD("contains_point", "point"), &QuadTreeQuadrant::contains_point);
+	ClassDB::bind_method(D_METHOD("contains_region", "region"), &QuadTreeQuadrant::contains_region);
     ClassDB::bind_method(D_METHOD("get_center"), &QuadTreeQuadrant::get_center);
 	ClassDB::bind_method(D_METHOD("set_center", "center"), &QuadTreeQuadrant::set_center);
     ClassDB::bind_method(D_METHOD("get_span"), &QuadTreeQuadrant::get_span);

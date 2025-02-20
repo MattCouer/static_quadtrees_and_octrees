@@ -65,11 +65,18 @@ public:
 	int64_t find_depth();
 	TypedArray<OcTreeOctant> layout_leaves();
 	void layout_leaves_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOctant> leaves);
+	TypedArray<OcTreeOctant> layout_level(int64_t at_depth);
+	void layout_level_recursive(Ref<OcTreeOctant> root, int64_t at_depth, TypedArray<OcTreeOctant>& arr);
 	Ref<OcTreeOctant>  leaf_that_contains_point(Vector3 point);
 	Ref<OcTreeOctant> leaf_that_contains_point_recursive(Ref<OcTreeOctant> root, Vector3 point);
 	Ref<OcTreeOctant> cell_that_contains_point(Vector3 point, int64_t at_depth);
 	Ref<OcTreeOctant> cell_that_contains_point_recursive(Ref<OcTreeOctant> root, Vector3 point, int64_t at_depth);
-		
+	
+	TypedArray<OcTreeOctant> leaves_in_radius(Vector3 center, real_t radius);
+    TypedArray<OcTreeOctant> leaves_in_bounding_box(Vector3 center, real_t span);
+	TypedArray<OcTreeOctant> cells_in_radius(Vector3 center, real_t radius, int64_t at_depth);
+    TypedArray<OcTreeOctant> cells_in_bounding_box(Vector3 center, real_t span, int64_t at_depth);
+
 	TypedArray<OcTreeOctant> cells_that_intersect_ray(Vector3 ray_origin, Vector3 ray_direction);
     void cells_that_intersect_ray_recursive(Ref<OcTreeOctant> root, TypedArray<OcTreeOctant> &intersected, Vector3 ray_origin, Vector3 ray_direction);
 	
